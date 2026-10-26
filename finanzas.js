@@ -185,14 +185,16 @@ function opciones(select, mapa, valor) {
 
 function formularioGestion(e) {
   const total = e.resumen.total;
-  const senaSugerida = Math.round((total * (config.senaPct || 0)) / 100 / 100) * 100;
+  // La seña que figuró en el presupuesto (o la de Ajustes en los guardados antes)
+  const senaPctPedido = e.trabajo.senaPct ?? config.senaPct ?? 0;
+  const senaSugerida = montoSena(total, senaPctPedido);
   const form = document.createElement('form');
   form.className = 'campos gestion';
   form.innerHTML = `
     <label>Estado <select name="estado"></select></label>
     <label>Fecha de entrega <input name="entrega" type="date"></label>
     <label>Seña ($) <input name="sena" type="number" min="0" step="100" inputmode="decimal">
-      <button type="button" class="link" data-accion="sena">Usar ${config.senaPct}% (${money.format(senaSugerida)})</button></label>
+      <button type="button" class="link" data-accion="sena">Usar ${senaPctPedido}% (${money.format(senaSugerida)})</button></label>
     <label>Seña pagada con <select name="senaMetodo"></select></label>
     <label>Cobrado en total ($) <input name="cobro" type="number" min="0" step="100" inputmode="decimal">
       <small>Incluye la seña. Cambialo si cobraste otro monto.</small></label>

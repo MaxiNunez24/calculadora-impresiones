@@ -371,6 +371,11 @@ function roundUp(value, step) {
   return step > 0 ? Math.ceil(value / step) * step : Math.round(value);
 }
 
+/** Seña redondeada a $100. La usan el presupuesto y Finanzas, para que coincidan. */
+function montoSena(total, pct) {
+  return pct > 0 ? Math.min(total, Math.round((total * pct) / 100 / 100) * 100) : 0;
+}
+
 function descuentoEscala(cfg, cantidad) {
   return cfg.escalas
     .filter((e) => e.desde > 0 && cantidad >= e.desde)
@@ -415,6 +420,9 @@ function calcular(cfg, t) {
   const total = descuentoPct > 0 ? Math.min(subtotal, roundUp(subtotal * (1 - descuentoPct / 100), cfg.redondeo)) : subtotal;
   const descuentoMonto = subtotal - total;
   const ganancia = total - costoTotal;
+  // 5) Seña para confirmar el pedido (la de Ajustes o la de este pedido)
+  const senaPct = Math.min(100, Math.max(0, t.senaPct ?? cfg.senaPct ?? 0));
+  const senaMonto = montoSena(total, senaPct);
 
   const kwh = kw * horas;
   const precioGramo = fil.pesoRollo > 0 ? fil.precioRollo / fil.pesoRollo : 0;
@@ -474,6 +482,8 @@ function calcular(cfg, t) {
     subtotal,
     descuentoPct,
     descuentoMonto,
+    senaPct,
+    senaMonto,
     total,
     ganancia,
     margenPct: total > 0 ? (ganancia / total) * 100 : 0,
@@ -482,7 +492,7 @@ function calcular(cfg, t) {
 
 // ---------- Formulario de trabajo ----------
 const CAMPOS_TRABAJO = ['nombre', 'concepto', 'cantidad', 'gramos', 'horas', 'minutos',
-  'horasDiseno', 'bonificarDiseno', 'otros', 'precioManual', 'descuento', 'ganancia', 'notas'];
+  'horasDiseno', 'bonificarDiseno', 'otros', 'precioManual', 'descuento', 'ganancia', 'senaPct', 'notas'];
 
 function leerTrabajo() {
   return {
@@ -502,6 +512,7 @@ function leerTrabajo() {
     precioManual: $('#precioManual').dataset.manual ? numOrNull($('#precioManual').value) : null,
     descuento: $('#descuento').dataset.manual ? numOrNull($('#descuento').value) : null,
     ganancia: $('#ganancia').dataset.manual ? numOrNull($('#ganancia').value) : null,
+    senaPct: $('#senaPct').dataset.manual ? numOrNull($('#senaPct').value) : null,
     notas: $('#notas').value.trim(),
   };
 }
@@ -523,6 +534,7 @@ function cargarTrabajo(t) {
   marcarManual($('#precioManual'), t.precioManual != null);
   marcarManual($('#descuento'), t.descuento != null);
   marcarManual($('#ganancia'), t.ganancia != null);
+  marcarManual($('#senaPct'), t.senaPct != null);
   $('#filamento').value = t.filamentoId;
   renderSelectColores();
   $('#color').value = t.color ?? '';
@@ -587,6 +599,10 @@ function renderResultado() {
   dlPrecio.replaceChildren();
   filaDl(dlPrecio, 'Total a cobrar', money.format(r.total), 'destacado');
   if (r.cantidad > 1) filaDl(dlPrecio, 'Equivale por unidad', money.format(r.total / r.cantidad));
+  if (r.senaMonto > 0) {
+    filaDl(dlPrecio, `Seña para confirmar (${r.senaPct}%)`, money.format(r.senaMonto));
+    filaDl(dlPrecio, 'Saldo al entregar', money.format(r.total - r.senaMonto));
+  }
   filaDl(dlPrecio, 'Ganancia real (total − costo total)', `${money.format(r.ganancia)} (${r.margenPct.toFixed(0)}%)`, r.ganancia >= 0 ? 'positivo' : 'negativo');
 
   // Campos de precio y descuento: muestran el valor automático hasta que los edites
@@ -600,6 +616,12 @@ function renderResultado() {
     ? `De este pedido. En Configuración: ${config.gananciaPct}%.`
     : 'La de Configuración. Subila para piezas chicas.';
   $('#restablecerGanancia').hidden = !inputGanancia.dataset.manual;
+  const inputSena = $('#senaPct');
+  if (!inputSena.dataset.manual) inputSena.value = config.senaPct ?? 0;
+  $('#ayudaSena').textContent = r.senaMonto > 0
+    ? `${money.format(r.senaMonto)} al confirmar. ${inputSena.dataset.manual ? `En Ajustes: ${config.senaPct}%.` : 'La de Ajustes.'} 0 = sin seña.`
+    : 'Sin seña: no aparece en el presupuesto.';
+  $('#restablecerSena').hidden = !inputSena.dataset.manual;
   $('#ayudaPrecio').textContent = inputPrecio.dataset.manual
     ? `Mínimo recomendado: ${money.format(r.sugeridoUnidad)} (costo + ${r.gananciaPct}%).`
     : `Es el mínimo recomendado (costo + ${r.gananciaPct}%). Escribí tu precio de venta si es mayor.`;
@@ -1031,6 +1053,13 @@ function renderPresupuesto(t, r) {
     chips.append(...r.filamento.colores.map((c) => crearChip(c)));
     colores.append(`Colores disponibles en ${r.filamento.nombre}:`, chips);
   }
+  const sena = $('#pSena');
+  sena.hidden = !(r.senaMonto > 0 && r.total > 0);
+  sena.innerHTML = '<div><span>Seña para confirmar el pedido</span><strong></strong></div><div><span>Saldo al entregar</span><strong></strong></div>';
+  sena.querySelector('span').textContent = `Seña para confirmar el pedido (${r.senaPct}%)`;
+  const [montoSenaEl, saldoEl] = sena.querySelectorAll('strong');
+  montoSenaEl.textContent = money.format(r.senaMonto);
+  saldoEl.textContent = money.format(r.total - r.senaMonto);
   $('#pNotas').textContent = t.notas;
   $('#pValidez').textContent = config.validezDias > 0
     ? `Presupuesto válido por ${config.validezDias} días desde la fecha de emisión.`
@@ -1278,17 +1307,18 @@ document.querySelectorAll('.tab').forEach((tab) => {
 $('#trabajo').addEventListener('input', (e) => {
   if (e.target.id === 'filamento') renderSelectColores();
   // Escribir en precio o descuento los deja fijos; borrarlos vuelve al automático
-  if (['precioManual', 'descuento', 'ganancia'].includes(e.target.id)) marcarManual(e.target, e.target.value !== '');
+  if (['precioManual', 'descuento', 'ganancia', 'senaPct'].includes(e.target.id)) marcarManual(e.target, e.target.value !== '');
   renderResultado();
 });
 $('#trabajo').addEventListener('reset', () => setTimeout(() => {
   marcarManual($('#precioManual'), false);
   marcarManual($('#descuento'), false);
   marcarManual($('#ganancia'), false);
+  marcarManual($('#senaPct'), false);
   renderSelectColores();
   renderResultado();
 }));
-for (const [boton, campo] of [['#restablecerPrecio', '#precioManual'], ['#restablecerDescuento', '#descuento'], ['#restablecerGanancia', '#ganancia']]) {
+for (const [boton, campo] of [['#restablecerPrecio', '#precioManual'], ['#restablecerDescuento', '#descuento'], ['#restablecerGanancia', '#ganancia'], ['#restablecerSena', '#senaPct']]) {
   $(boton).addEventListener('click', () => {
     marcarManual($(campo), false);
     renderResultado();

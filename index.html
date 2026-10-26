@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Calculadora de impresiones</title>
   <meta name="description" content="Costos, presupuestos, catálogo de colores y ventas de impresiones 3D y térmicas">
-  <link rel="stylesheet" href="styles.css?v=14">
+  <link rel="stylesheet" href="styles.css?v=15">
 </head>
 <body class="bloqueado">
   <!-- Pantalla de ingreso: la contraseña es el token del Worker, que es lo que protege los datos -->
@@ -114,6 +114,11 @@
             <small id="ayudaDescuento"></small>
             <button type="button" id="restablecerDescuento" class="link" hidden>↺ Usar la escala</button>
           </label>
+          <label>Seña para confirmar (%)
+            <input id="senaPct" type="number" min="0" max="100" step="5" inputmode="decimal">
+            <small id="ayudaSena"></small>
+            <button type="button" id="restablecerSena" class="link" hidden>↺ Usar la de Ajustes</button>
+          </label>
           <label class="ancho">Notas para el cliente
             <textarea id="notas" rows="2" placeholder="Ej: Incluye argolla metálica. Entrega en 5 días hábiles."></textarea>
           </label>
@@ -173,6 +178,7 @@
                 <tr><th colspan="3">Total</th><td id="pTotal"></td></tr>
               </tfoot>
             </table>
+            <div id="pSena" class="papel-sena" hidden></div>
             <div id="pColores" class="papel-colores"></div>
             <p id="pNotas" class="papel-texto"></p>
             <p id="pValidez" class="papel-pie"></p>
@@ -495,8 +501,8 @@
     </section>
   </main>
 
-  <script src="app.js?v=14"></script>
-  <script src="termica.js?v=14"></script>
-  <script src="finanzas.js?v=14"></script>
+  <script src="app.js?v=15"></script>
+  <script src="termica.js?v=15"></script>
+  <script src="finanzas.js?v=15"></script>
 </body>
 </html>

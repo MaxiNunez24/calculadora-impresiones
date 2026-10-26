@@ -267,6 +267,10 @@ table.editable input, table.editable select { margin: 0; }
 .papel-texto:empty { display: none; }
 .papel-pie { margin: 1.25rem 0 0; color: #65676b; font-size: 0.78rem; }
 .papel-colores:empty { display: none; }
+.papel-sena { border: 1px solid #fa6831; border-radius: 6px; padding: 0.5rem 0.75rem; margin-bottom: 0.9rem; font-size: 0.9rem; }
+.papel-sena div { display: flex; justify-content: space-between; gap: 0.75rem; padding: 0.15rem 0; }
+.papel-sena div:first-child strong { color: #fa6831; }
+.papel-sena[hidden] { display: none; }
 .papel-colores { margin-bottom: 0.75rem; font-size: 0.85rem; }
 .papel-colores .chips { margin: 0.35rem 0 0; }
 .papel .chip { border-color: #dfe1e5; }
