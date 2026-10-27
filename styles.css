@@ -412,3 +412,18 @@ table.editable.productos-termica { min-width: 640px; }
 .visor-paletas .igual input { width: auto; margin: 0; }
 /* Los campos ocultos (por ejemplo, de archivo dentro de un botón) no se muestran aunque otra regla les dé display */
 input[hidden] { display: none !important; }
+
+/* ---------- Página pública para el cliente ---------- */
+body.publica .elegir { max-width: 760px; margin: 0 auto; padding: 1rem; }
+body.publica .elegir h1 { font-size: 1.35rem; margin: 0.1rem 0 0.4rem; }
+body.publica .visor-paletas { margin-top: 1rem; }
+body.publica #eForm { margin-top: 0.5rem; }
+.visor-compartir { margin-top: 0.5rem; }
+.visor-compartir h3 { font-size: 0.95rem; margin: 0; }
+.ofrecer { display: flex; flex-wrap: wrap; gap: 0.35rem 0.75rem; }
+.ofrecer label { display: inline-flex; align-items: center; gap: 0.35rem; margin: 0; font-size: 0.85rem; cursor: pointer; }
+.ofrecer input { width: auto; margin: 0; }
+.visor-link { display: grid; grid-template-columns: 1fr auto auto; gap: 0.4rem; align-items: center; margin-top: 0.75rem; }
+.visor-link input { margin: 0; font-size: 0.8rem; }
+.visor-link[hidden] { display: none; }
+@media (max-width: 480px) { .visor-link { grid-template-columns: 1fr 1fr; } .visor-link input { grid-column: 1 / -1; } }

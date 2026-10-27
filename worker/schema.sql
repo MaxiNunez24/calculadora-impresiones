@@ -39,3 +39,11 @@ CREATE TABLE IF NOT EXISTS movimientos (
   datos TEXT NOT NULL                 -- JSON completo del movimiento
 );
 CREATE INDEX IF NOT EXISTS idx_movimientos_fecha ON movimientos (fecha);
+
+-- Links para que un cliente elija colores (id aleatorio; vencen a los 60 días)
+CREATE TABLE IF NOT EXISTS compartidos (
+  id       TEXT PRIMARY KEY,
+  creado   TEXT NOT NULL,
+  datos    TEXT NOT NULL,             -- JSON: título, colores ofrecidos y modelo (STL en base64)
+  eleccion TEXT                       -- JSON con lo que eligió el cliente
+);

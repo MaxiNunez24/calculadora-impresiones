@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Calculadora de impresiones</title>
   <meta name="description" content="Costos, presupuestos, catálogo de colores y ventas de impresiones 3D y térmicas">
-  <link rel="stylesheet" href="styles.css?v=16">
+  <link rel="stylesheet" href="styles.css?v=17">
 </head>
 <body class="bloqueado">
   <!-- Pantalla de ingreso: la contraseña es el token del Worker, que es lo que protege los datos -->
@@ -220,6 +220,30 @@
             </div>
           </div>
           <div id="vPaletas" class="visor-paletas"></div>
+        </div>
+
+        <div class="visor-compartir">
+          <h2 class="sub">Compartir con un cliente</h2>
+          <p class="nota">Crea un link para que el cliente pruebe colores en su celular y te mande su elección. No ve nada más de tu página. Vence a los 60 días.</p>
+          <label>Título
+            <input id="vTitulo" type="text" maxlength="80" placeholder="Ej: Llaveros Essen – Elena">
+          </label>
+          <p class="nota" style="margin-bottom:0.3rem">Colores que le ofrecés:</p>
+          <div id="vOfrecer" class="ofrecer"></div>
+          <div class="acciones">
+            <button type="button" id="vCompartir" class="btn small" disabled>Crear link</button>
+          </div>
+          <div id="vLink" class="visor-link" hidden>
+            <input id="vLinkUrl" type="text" readonly aria-label="Link para el cliente">
+            <button type="button" id="vCopiar" class="btn small secondary">Copiar</button>
+            <a id="vMandar" class="btn small" target="_blank" rel="noopener">Mandar por WhatsApp</a>
+          </div>
+          <p id="vCompartirEstado" class="estado"></p>
+          <div class="barra-titulo" style="margin-top:1rem">
+            <h3>Links enviados</h3>
+            <button type="button" id="vActualizarLinks" class="btn small secondary">Actualizar</button>
+          </div>
+          <ul id="vLinks" class="historial"></ul>
         </div>
       </div>
 
@@ -535,9 +559,10 @@
     </section>
   </main>
 
-  <script src="app.js?v=16"></script>
-  <script src="termica.js?v=16"></script>
-  <script src="finanzas.js?v=16"></script>
-  <script src="visor.js?v=16"></script>
+  <script src="app.js?v=17"></script>
+  <script src="termica.js?v=17"></script>
+  <script src="finanzas.js?v=17"></script>
+  <script src="visor3d.js?v=17"></script>
+  <script src="visor.js?v=17"></script>
 </body>
 </html>

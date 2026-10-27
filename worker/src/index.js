@@ -12,8 +12,16 @@
  *   GET    /precios               últimos precios guardados (no consulta PrintALot)
  *   POST   /precios/actualizar     consulta PrintALot (como mucho cada 10 minutos)
  *   GET    /colores/:productoId    colores (nombre y tono) de un producto de PrintALot, guardados 7 días
+ *   POST   /compartidos            crea un link para que un cliente elija colores (devuelve el id)
+ *   GET    /compartidos            links creados y lo que eligió cada cliente
+ *   DELETE /compartidos/:id
  *
- * Todo requiere "Authorization: Bearer <API_TOKEN>". Un cron semanal también actualiza los precios.
+ * Todo requiere "Authorization: Bearer <API_TOKEN>", salvo las rutas públicas de los links
+ * (el id es aleatorio de 128 bits, no se puede adivinar; vencen a los 60 días):
+ *   GET    /publico/:id            modelo y colores ofrecidos
+ *   POST   /publico/:id/eleccion   el cliente guarda los colores que eligió
+ *
+ * Un cron semanal también actualiza los precios.
  */
 
 const PRINTALOT_API = 'https://printalot.com.ar/wp-json/wc/store/v1/products?category=338&per_page=100';
@@ -21,6 +29,8 @@ const PRINTALOT_PRODUCTO = 'https://printalot.com.ar/wp-json/wc/store/v1/product
 const MINUTOS_ENTRE_ACTUALIZACIONES = 10;
 const DIAS_CACHE_COLORES = 7;
 const USER_AGENT = 'calculadora-3d-personal (consulta semanal de precios)';
+const DIAS_LINK = 60;
+const MAX_LINK_BYTES = 1_800_000; // D1 admite filas de hasta 2 MB
 
 class HttpError extends Error {
   constructor(status, message) {
@@ -34,6 +44,7 @@ export default {
     const cors = corsHeaders(request.headers.get('Origin'), env);
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
     try {
+      if (new URL(request.url).pathname.startsWith('/publico/')) return json(await rutearPublico(request, env), 200, cors);
       if (!(await autorizado(request, env))) throw new HttpError(401, 'Token inválido');
       return json(await rutear(request, env), 200, cors);
     } catch (e) {
@@ -145,6 +156,20 @@ async function rutear(request, env) {
   if (recurso === 'precios') {
     if (metodo === 'GET' && !id) return listarPrecios(env);
     if (metodo === 'POST' && id === 'actualizar') return actualizarPrecios(env);
+  }
+
+  if (recurso === 'compartidos') {
+    if (metodo === 'POST' && !id) return crearCompartido(request, env);
+    if (metodo === 'GET' && !id) {
+      const { results } = await env.DB.prepare(
+        "SELECT id, creado, json_extract(datos, '$.titulo') AS titulo, eleccion FROM compartidos ORDER BY creado DESC",
+      ).all();
+      return results.map((r) => ({ id: r.id, creado: r.creado, titulo: r.titulo, eleccion: r.eleccion ? JSON.parse(r.eleccion) : null }));
+    }
+    if (metodo === 'DELETE' && id) {
+      await env.DB.prepare('DELETE FROM compartidos WHERE id = ?1').bind(id).run();
+      return { ok: true };
+    }
   }
 
   if (recurso === 'colores' && metodo === 'GET' && /^\d+$/.test(id || '')) {
@@ -267,4 +292,64 @@ async function coloresPrintalot(env, productoId) {
      ON CONFLICT(producto_id) DO UPDATE SET datos = excluded.datos, actualizado = excluded.actualizado`,
   ).bind(productoId, JSON.stringify(colores), ahora).run();
   return { actualizado: ahora, colores };
+}
+
+// ---------- Links para que el cliente elija colores ----------
+const esHex = (v) => typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v);
+const texto = (v, max) => String(v ?? '').trim().slice(0, max);
+
+async function crearCompartido(request, env) {
+  const cuerpo = await request.text();
+  if (cuerpo.length > MAX_LINK_BYTES) throw new HttpError(413, 'El modelo es demasiado grande para compartir');
+  let d;
+  try { d = JSON.parse(cuerpo); } catch { throw new HttpError(400, 'El cuerpo no es JSON válido'); }
+  const colores = (Array.isArray(d.colores) ? d.colores : []).filter((c) => esHex(c?.hex)).slice(0, 40)
+    .map((c) => ({ nombre: texto(c.nombre, 40), hex: c.hex }));
+  if (colores.length < 2) throw new HttpError(400, 'Ofrecé al menos dos colores');
+  if (typeof d.base !== 'string' || !d.base) throw new HttpError(400, 'Falta el modelo de la base');
+  const datos = {
+    titulo: texto(d.titulo, 80) || 'Tu llavero',
+    negocio: texto(d.negocio, 80),
+    whatsapp: texto(d.whatsapp, 20).replace(/\D/g, ''),
+    altura: Number(d.altura) || 2,
+    colores,
+    base: d.base,
+    numero: typeof d.numero === 'string' ? d.numero : null,
+  };
+  const id = crypto.randomUUID().replace(/-/g, '');
+  await env.DB.prepare('INSERT INTO compartidos (id, creado, datos) VALUES (?1, ?2, ?3)')
+    .bind(id, new Date().toISOString(), JSON.stringify(datos)).run();
+  return { id };
+}
+
+async function rutearPublico(request, env) {
+  const [, id, accion] = new URL(request.url).pathname.split('/').filter(Boolean);
+  if (!/^[0-9a-f]{32}$/.test(id || '')) throw new HttpError(404, 'Link inválido');
+  const fila = await env.DB.prepare('SELECT datos, creado, eleccion FROM compartidos WHERE id = ?1').bind(id).first();
+  if (!fila || Date.now() - Date.parse(fila.creado) > DIAS_LINK * 86_400_000) {
+    throw new HttpError(404, 'Este link no existe o ya venció');
+  }
+  const datos = JSON.parse(fila.datos);
+  if (request.method === 'GET' && !accion) {
+    return { ...datos, eleccion: fila.eleccion ? JSON.parse(fila.eleccion) : null };
+  }
+  if (request.method === 'POST' && accion === 'eleccion') {
+    const e = await leerJson(request);
+    const permitidos = new Set(datos.colores.map((c) => c.hex.toLowerCase()));
+    for (const parte of ['base', 'letras', 'numero']) {
+      if (!esHex(e[parte]) || !permitidos.has(e[parte].toLowerCase())) throw new HttpError(400, 'Color no disponible');
+    }
+    const nombreDe = (hex) => datos.colores.find((c) => c.hex.toLowerCase() === hex.toLowerCase()).nombre;
+    const eleccion = {
+      fecha: new Date().toISOString(),
+      base: { hex: e.base, nombre: nombreDe(e.base) },
+      letras: { hex: e.letras, nombre: nombreDe(e.letras) },
+      numero: { hex: e.numero, nombre: nombreDe(e.numero) },
+      nombre: texto(e.nombre, 60),
+      comentario: texto(e.comentario, 300),
+    };
+    await env.DB.prepare('UPDATE compartidos SET eleccion = ?1 WHERE id = ?2').bind(JSON.stringify(eleccion), id).run();
+    return { ok: true, eleccion };
+  }
+  throw new HttpError(404, 'Ruta no encontrada');
 }

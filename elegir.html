@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Elegí los colores de tu llavero</title>
+  <meta name="description" content="Probá combinaciones de colores y elegí la tuya">
+  <link rel="stylesheet" href="styles.css?v=17">
+</head>
+<body class="publica">
+  <main class="elegir">
+    <div class="card">
+      <p class="subtitle" id="eNegocio"></p>
+      <h1 id="eTitulo">Elegí los colores de tu llavero</h1>
+      <p class="nota">Tocá un color para cada parte. Podés girar el llavero con el dedo o con el mouse.</p>
+
+      <div class="visor-lienzo">
+        <canvas id="eLienzo"></canvas>
+        <p id="eVacio" class="visor-vacio">Cargando el modelo…</p>
+        <div class="acciones">
+          <div class="acciones" style="margin:0">
+            <button type="button" class="btn small secondary" data-vista="frente">Frente</button>
+            <button type="button" class="btn small secondary" data-vista="dorso">Dorso</button>
+          </div>
+          <button type="button" id="eDescargar" class="btn small secondary" disabled>Descargar imagen</button>
+        </div>
+      </div>
+
+      <div id="ePaletas" class="visor-paletas"></div>
+
+      <form id="eForm">
+        <label>Tu nombre (opcional)
+          <input id="eNombre" type="text" maxlength="60" autocomplete="name">
+        </label>
+        <label>Comentario (opcional)
+          <textarea id="eComentario" rows="2" maxlength="300" placeholder="Ej: 20 de esta combinación y 20 de otra"></textarea>
+        </label>
+        <div class="acciones">
+          <button id="eEnviar" class="btn" disabled>Enviar mi elección</button>
+          <a id="eWhatsapp" class="btn secondary" target="_blank" rel="noopener" hidden>Avisar por WhatsApp</a>
+        </div>
+        <p id="eEstado" class="estado"></p>
+      </form>
+    </div>
+  </main>
+
+  <script src="visor3d.js?v=17"></script>
+  <script src="elegir.js?v=17"></script>
+</body>
+</html>
