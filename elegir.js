@@ -59,7 +59,8 @@ async function iniciar() {
   $e('#eTitulo').textContent = datosLink.titulo;
   $e('#eNegocio').textContent = datosLink.negocio;
   // Arranca con lo que ya eligió (si volvió a entrar) o con los dos primeros colores
-  const previa = datosLink.eleccion;
+  datosLink.elecciones ||= [];
+  const previa = datosLink.elecciones.at(-1);
   estado.base = previa?.base.hex || datosLink.colores[0].hex;
   estado.letras = previa?.letras.hex || datosLink.colores[1].hex;
   estado.numero = previa?.numero.hex || estado.letras;
@@ -84,7 +85,60 @@ async function iniciar() {
   actualizar();
   $e('#eEnviar').disabled = false;
   $e('#eDescargar').disabled = false;
-  if (previa) mensaje(`Ya habías elegido: ${textoEleccion()}. Podés cambiarlo y enviarlo de nuevo.`);
+  if (previa) mensaje(`Ya enviaste ${datosLink.elecciones.length === 1 ? 'una combinación' : `${datosLink.elecciones.length} combinaciones`}. Podés probar otra y enviarla también.`);
+  renderEnviadas();
+}
+
+/** Guarda la combinación actual en el historial del link. origen: 'web' o 'whatsapp'. */
+async function enviarEleccion(origen) {
+  const c = coloresElegidos(estado);
+  const resp = await fetch(`${API_PUBLICA}/publico/${idLink}/eleccion`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...c, nombre: $e('#eNombre').value, comentario: $e('#eComentario').value, origen }),
+    keepalive: true, // que llegue aunque se abra WhatsApp
+  });
+  const datos = await resp.json();
+  if (!resp.ok) throw new Error(datos.error || `Error ${resp.status}`);
+  datosLink.elecciones = datos.elecciones;
+  renderEnviadas();
+}
+
+function renderEnviadas() {
+  const cont = $e('#eEnviadas');
+  const lista = datosLink.elecciones || [];
+  if (!lista.length) { cont.replaceChildren(); return; }
+  const h3 = document.createElement('h3');
+  h3.textContent = 'Tus combinaciones enviadas';
+  const ul = document.createElement('ul');
+  ul.className = 'historial';
+  ul.append(...[...lista].reverse().map((e) => {
+    const li = document.createElement('li');
+    const info = document.createElement('div');
+    info.className = 'info';
+    const muestras = document.createElement('span');
+    muestras.className = 'trio';
+    muestras.append(...['base', 'letras', 'numero'].map((p) => muestraColor(e[p].hex)));
+    const texto = document.createElement('small');
+    const partes = [`base ${e.base.nombre}`, `letras ${e.letras.nombre}`];
+    if (visorCliente.mallas.numero && e.numero.hex !== e.letras.hex) partes.push(`número ${e.numero.nombre}`);
+    texto.textContent = `${partes.join(', ')} · ${new Date(e.fecha).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })}`;
+    info.append(muestras, texto);
+    const ver = document.createElement('button');
+    ver.type = 'button';
+    ver.className = 'btn small secondary';
+    ver.textContent = 'Ver';
+    ver.addEventListener('click', () => {
+      Object.assign(estado, { base: e.base.hex, letras: e.letras.hex, numero: e.numero.hex, numeroIgualLetras: e.numero.hex === e.letras.hex });
+      const partesVisor = PARTES_VISOR.filter(([p]) => p !== 'numero' || visorCliente.mallas.numero);
+      renderPaletasVisor($e('#ePaletas'), datosLink.colores, estado, actualizar, partesVisor);
+      actualizar();
+      $e('#eLienzo').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    li.append(info, ver);
+    return li;
+  }));
+  cont.replaceChildren(h3, ul);
 }
 
 $e('#eForm').addEventListener('submit', async (ev) => {
@@ -92,20 +146,16 @@ $e('#eForm').addEventListener('submit', async (ev) => {
   const boton = $e('#eEnviar');
   boton.disabled = true;
   try {
-    const c = coloresElegidos(estado);
-    const resp = await fetch(`${API_PUBLICA}/publico/${idLink}/eleccion`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...c, nombre: $e('#eNombre').value, comentario: $e('#eComentario').value }),
-    });
-    const datos = await resp.json();
-    if (!resp.ok) throw new Error(datos.error || `Error ${resp.status}`);
-    mensaje(`¡Listo! Recibimos tu elección: ${textoEleccion()}.`, 'ok');
+    await enviarEleccion('web');
+    mensaje(`¡Listo! Recibimos tu elección: ${textoEleccion()}. Si querés, probá otra y enviala también.`, 'ok');
   } catch (e) {
     mensaje(`No se pudo enviar: ${e.message}. Probá con el botón de WhatsApp.`, 'error');
   } finally {
     boton.disabled = false;
   }
+});
+$e('#eWhatsapp').addEventListener('click', () => {
+  enviarEleccion('whatsapp').catch(() => { /* el mensaje de WhatsApp igual sale */ });
 });
 ['#eNombre', '#eComentario'].forEach((s) => $e(s).addEventListener('input', () => datosLink && actualizar()));
 document.querySelectorAll('[data-vista]').forEach((b) => b.addEventListener('click', () => visorCliente.vista(b.dataset.vista)));

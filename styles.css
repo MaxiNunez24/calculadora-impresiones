@@ -427,3 +427,11 @@ body.publica #eForm { margin-top: 0.5rem; }
 .visor-link input { margin: 0; font-size: 0.8rem; }
 .visor-link[hidden] { display: none; }
 @media (max-width: 480px) { .visor-link { grid-template-columns: 1fr 1fr; } .visor-link input { grid-column: 1 / -1; } }
+
+.enviadas { margin-top: 1rem; }
+.enviadas h3 { font-size: 0.95rem; margin: 0 0 0.3rem; }
+.trio { display: inline-flex; gap: 0.2rem; margin-right: 0.4rem; vertical-align: middle; }
+.historial li.eleccion-vieja { opacity: 0.75; }
+.link-compartido { flex-wrap: wrap; }
+.link-compartido .info { flex: 1 1 14rem; }
+.link-compartido .gestionar .historial li { padding: 0.4rem 0; }

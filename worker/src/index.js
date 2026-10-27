@@ -19,7 +19,7 @@
  * Todo requiere "Authorization: Bearer <API_TOKEN>", salvo las rutas públicas de los links
  * (el id es aleatorio de 128 bits, no se puede adivinar; vencen a los 60 días):
  *   GET    /publico/:id            modelo y colores ofrecidos
- *   POST   /publico/:id/eleccion   el cliente guarda los colores que eligió
+ *   POST   /publico/:id/eleccion   el cliente agrega una combinación al historial del link
  *
  * Un cron semanal también actualiza los precios.
  */
@@ -164,7 +164,7 @@ async function rutear(request, env) {
       const { results } = await env.DB.prepare(
         "SELECT id, creado, json_extract(datos, '$.titulo') AS titulo, eleccion FROM compartidos ORDER BY creado DESC",
       ).all();
-      return results.map((r) => ({ id: r.id, creado: r.creado, titulo: r.titulo, eleccion: r.eleccion ? JSON.parse(r.eleccion) : null }));
+      return results.map((r) => ({ id: r.id, creado: r.creado, titulo: r.titulo, elecciones: historialDe(r.eleccion) }));
     }
     if (metodo === 'DELETE' && id) {
       await env.DB.prepare('DELETE FROM compartidos WHERE id = ?1').bind(id).run();
@@ -295,6 +295,14 @@ async function coloresPrintalot(env, productoId) {
 }
 
 // ---------- Links para que el cliente elija colores ----------
+const MAX_ELECCIONES = 30;
+const MINUTOS_REPETIDA = 10;
+// La columna "eleccion" guardaba una sola elección; ahora guarda la lista (se aceptan las dos formas)
+function historialDe(texto) {
+  if (!texto) return [];
+  const v = JSON.parse(texto);
+  return Array.isArray(v) ? v : [v];
+}
 const esHex = (v) => typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v);
 const texto = (v, max) => String(v ?? '').trim().slice(0, max);
 
@@ -330,8 +338,9 @@ async function rutearPublico(request, env) {
     throw new HttpError(404, 'Este link no existe o ya venció');
   }
   const datos = JSON.parse(fila.datos);
+  const historial = historialDe(fila.eleccion);
   if (request.method === 'GET' && !accion) {
-    return { ...datos, eleccion: fila.eleccion ? JSON.parse(fila.eleccion) : null };
+    return { ...datos, elecciones: historial };
   }
   if (request.method === 'POST' && accion === 'eleccion') {
     const e = await leerJson(request);
@@ -347,9 +356,23 @@ async function rutearPublico(request, env) {
       numero: { hex: e.numero, nombre: nombreDe(e.numero) },
       nombre: texto(e.nombre, 60),
       comentario: texto(e.comentario, 300),
+      origen: e.origen === 'whatsapp' ? 'whatsapp' : 'web',
     };
-    await env.DB.prepare('UPDATE compartidos SET eleccion = ?1 WHERE id = ?2').bind(JSON.stringify(eleccion), id).run();
-    return { ok: true, eleccion };
+    // Si manda la misma combinación de nuevo en pocos minutos (por ejemplo, "Enviar" y después
+    // WhatsApp), se actualiza la última en vez de repetirla
+    const ultima = historial.at(-1);
+    const repetida = ultima && Date.now() - Date.parse(ultima.fecha) < MINUTOS_REPETIDA * 60_000
+      && ['base', 'letras', 'numero'].every((p) => ultima[p].hex.toLowerCase() === eleccion[p].hex.toLowerCase())
+      && ultima.nombre === eleccion.nombre && ultima.comentario === eleccion.comentario;
+    if (repetida) {
+      ultima.fecha = eleccion.fecha;
+      if (ultima.origen !== eleccion.origen) ultima.origen = 'web y whatsapp';
+    } else {
+      historial.push(eleccion);
+    }
+    const guardar = historial.slice(-MAX_ELECCIONES);
+    await env.DB.prepare('UPDATE compartidos SET eleccion = ?1 WHERE id = ?2').bind(JSON.stringify(guardar), id).run();
+    return { ok: true, elecciones: guardar };
   }
   throw new HttpError(404, 'Ruta no encontrada');
 }

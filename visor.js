@@ -186,31 +186,61 @@ async function renderLinks() {
     return;
   }
   ul.replaceChildren(...lista.map((l) => {
+    const elecciones = l.elecciones || [];
+    const ultima = elecciones.at(-1);
     const li = document.createElement('li');
+    li.className = 'link-compartido';
     li.innerHTML = `
       <div class="info"><strong></strong><small></small></div>
       <div class="acciones" style="margin:0">
         <button type="button" class="btn small secondary" data-accion="copiar">Copiar link</button>
-        <button type="button" class="btn small secondary" data-accion="ver">Ver en el visor</button>
         <button type="button" class="icon-btn" data-accion="borrar" title="Borrar link">✕</button>
       </div>`;
     li.querySelector('strong').textContent = l.titulo;
-    const e = l.eleccion;
-    li.querySelector('small').textContent = `${new Date(l.creado).toLocaleDateString('es-AR')} · ` + (e
-      ? `✅ ${e.nombre ? `${e.nombre} eligió` : 'Eligió'}: ${describirEleccion(e)}${e.comentario ? ` · "${e.comentario}"` : ''}`
+    li.querySelector('small').textContent = `${new Date(l.creado).toLocaleDateString('es-AR')} · ` + (ultima
+      ? `✅ ${ultima.nombre ? `${ultima.nombre} eligió` : 'Eligió'}: ${describirEleccion(ultima)}` +
+        (elecciones.length > 1 ? ` (la última de ${elecciones.length})` : '')
       : '⏳ Esperando que elija');
-    li.querySelector('[data-accion="ver"]').hidden = !e;
+    if (elecciones.length) {
+      const detalle = document.createElement('details');
+      detalle.className = 'gestionar';
+      const resumen = document.createElement('summary');
+      resumen.textContent = elecciones.length === 1 ? 'Ver la combinación' : `Ver las ${elecciones.length} combinaciones`;
+      const sub = document.createElement('ul');
+      sub.className = 'historial';
+      sub.append(...[...elecciones].reverse().map((e) => {
+        const item = document.createElement('li');
+        const info = document.createElement('div');
+        info.className = 'info';
+        const trio = document.createElement('span');
+        trio.className = 'trio';
+        trio.append(...['base', 'letras', 'numero'].map((p) => muestraColor(e[p].hex)));
+        const texto = document.createElement('small');
+        const via = { whatsapp: ' · por WhatsApp', 'web y whatsapp': ' · web y WhatsApp' }[e.origen] || '';
+        texto.textContent = `${describirEleccion(e)} · ${new Date(e.fecha).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })}${via}` +
+          (e.comentario ? ` · "${e.comentario}"` : '');
+        info.append(trio, texto);
+        const ver = document.createElement('button');
+        ver.type = 'button';
+        ver.className = 'btn small secondary';
+        ver.textContent = 'Ver en el visor';
+        ver.addEventListener('click', () => {
+          estadoVisor = { base: e.base.hex, letras: e.letras.hex, numero: e.numero.hex, numeroIgualLetras: e.numero.hex === e.letras.hex };
+          visorPriv.pintar(coloresElegidos(estadoVisor));
+          renderPaletas();
+          document.querySelector('.visor').scrollIntoView({ behavior: 'smooth' });
+        });
+        item.append(info, ver);
+        return item;
+      }));
+      detalle.append(resumen, sub);
+      li.append(detalle);
+    }
     li.querySelector('[data-accion="copiar"]').addEventListener('click', async () => {
       try { await navigator.clipboard.writeText(urlDeLink(l.id)); estadoCompartir('Link copiado.', 'ok'); } catch { mostrarLink(l.id, l.titulo); }
     });
-    li.querySelector('[data-accion="ver"]').addEventListener('click', () => {
-      estadoVisor = { base: e.base.hex, letras: e.letras.hex, numero: e.numero.hex, numeroIgualLetras: e.numero.hex === e.letras.hex };
-      visorPriv.pintar(coloresElegidos(estadoVisor));
-      renderPaletas();
-      document.querySelector('.visor').scrollIntoView({ behavior: 'smooth' });
-    });
     li.querySelector('[data-accion="borrar"]').addEventListener('click', async () => {
-      if (!confirm(`¿Borrar el link "${l.titulo}"? El cliente ya no podrá abrirlo.`)) return;
+      if (!confirm(`¿Borrar el link "${l.titulo}"? El cliente ya no podrá abrirlo y se pierden sus combinaciones.`)) return;
       try { await api('DELETE', `/compartidos/${l.id}`); } catch (err) { estadoCompartir(err.message, 'error'); }
       renderLinks();
     });
