@@ -391,3 +391,24 @@ table.editable.productos-termica { min-width: 640px; }
 .form-gasto .concepto { grid-column: span 2; }
 .form-gasto .btn { margin-bottom: 0.75rem; }
 @media (max-width: 480px) { .form-gasto .concepto { grid-column: 1 / -1; } }
+
+/* ---------- Visualizador de colores ---------- */
+.visor-archivos { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; margin-bottom: 0.75rem; }
+.visor-altura { display: flex; align-items: center; gap: 0.4rem; margin: 0; font-size: 0.85rem; }
+.visor-altura input { width: 4.5rem; margin: 0; }
+.visor-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 1rem; align-items: start; }
+@media (max-width: 760px) { .visor-grid { grid-template-columns: 1fr; } }
+.visor-lienzo { position: relative; }
+.visor-lienzo canvas { display: block; width: 100%; height: 340px; border-radius: 10px; background: #eceef1; touch-action: none; }
+.visor-vacio { position: absolute; inset: 0 0 auto 0; height: 340px; display: grid; place-items: center; margin: 0; color: #65676b; pointer-events: none; }
+.visor-vacio[hidden] { display: none; }
+.visor-lienzo .acciones { margin-top: 0.6rem; align-items: center; }
+.visor-paletas h3 { font-size: 0.95rem; margin: 0 0 0.4rem; }
+.visor-paletas .paleta { margin-bottom: 0.9rem; }
+.visor-paletas .muestras { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.visor-paletas button { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.25rem 0.55rem 0.25rem 0.3rem; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; font-size: 0.82rem; cursor: pointer; }
+.visor-paletas button[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.visor-paletas .igual { font-size: 0.8rem; margin: 0.3rem 0 0; display: flex; align-items: center; gap: 0.35rem; }
+.visor-paletas .igual input { width: auto; margin: 0; }
+/* Los campos ocultos (por ejemplo, de archivo dentro de un botón) no se muestran aunque otra regla les dé display */
+input[hidden] { display: none !important; }

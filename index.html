@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Calculadora de impresiones</title>
   <meta name="description" content="Costos, presupuestos, catálogo de colores y ventas de impresiones 3D y térmicas">
-  <link rel="stylesheet" href="styles.css?v=15">
+  <link rel="stylesheet" href="styles.css?v=16">
 </head>
 <body class="bloqueado">
   <!-- Pantalla de ingreso: la contraseña es el token del Worker, que es lo que protege los datos -->
@@ -189,6 +189,40 @@
 
     <!-- ============ CATÁLOGO ============ -->
     <section id="catalogo" class="panel">
+      <div class="card ancho-total no-print visor">
+        <div class="barra-titulo">
+          <h2>Visualizador de colores</h2>
+          <span id="vCombinaciones" class="estado"></span>
+        </div>
+        <p class="nota">Cargá el STL de la base con las letras y, si tiene, el del número. Elegí un color para cada parte y descargá la imagen para mandársela al cliente.</p>
+        <div class="visor-archivos">
+          <label class="btn small secondary boton-archivo">Base con letras (STL)
+            <input id="vArchivoBase" type="file" accept=".stl" hidden>
+          </label>
+          <label class="btn small secondary boton-archivo">Número o inserto (STL, opcional)
+            <input id="vArchivoNumero" type="file" accept=".stl" hidden>
+          </label>
+          <label class="visor-altura">Las letras empiezan a
+            <input id="vAltura" type="number" min="0" step="0.1" value="2" inputmode="decimal"> mm
+          </label>
+          <span id="vEstado" class="estado"></span>
+        </div>
+        <div class="visor-grid">
+          <div class="visor-lienzo">
+            <canvas id="vLienzo"></canvas>
+            <p id="vVacio" class="visor-vacio">Cargá un STL para empezar</p>
+            <div class="acciones">
+              <div class="acciones" style="margin:0">
+                <button type="button" class="btn small secondary" data-vista="frente">Frente</button>
+                <button type="button" class="btn small secondary" data-vista="dorso">Dorso</button>
+              </div>
+              <button type="button" id="vDescargar" class="btn small" disabled>Descargar imagen</button>
+            </div>
+          </div>
+          <div id="vPaletas" class="visor-paletas"></div>
+        </div>
+      </div>
+
       <div class="card no-print">
         <h2>Colores por filamento</h2>
         <p class="nota">Cargá los colores que tenés en stock: a mano, importándolos de PrintALot o escaneando una foto de tus muestras. Se usan en el selector de color, en el presupuesto y en el catálogo.</p>
@@ -501,8 +535,9 @@
     </section>
   </main>
 
-  <script src="app.js?v=15"></script>
-  <script src="termica.js?v=15"></script>
-  <script src="finanzas.js?v=15"></script>
+  <script src="app.js?v=16"></script>
+  <script src="termica.js?v=16"></script>
+  <script src="finanzas.js?v=16"></script>
+  <script src="visor.js?v=16"></script>
 </body>
 </html>
