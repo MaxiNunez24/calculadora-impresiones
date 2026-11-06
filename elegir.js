@@ -11,6 +11,10 @@ const idLink = location.hash.slice(1);
 const visorCliente = new Visor3D($e('#eLienzo'));
 let datosLink = null;
 const estado = { numeroIgualLetras: true };
+const esModelo = () => datosLink?.tipo === 'modelo';
+/** Partes que el cliente pinta: un color para un modelo; base, letras y (si hay) número para un llavero. */
+const partesLink = () => (esModelo() ? [['modelo', 'Color']] : PARTES_VISOR.filter(([p]) => p !== 'numero' || visorCliente.mallas.numero));
+const coloresLink = () => (esModelo() ? { modelo: estado.modelo } : coloresElegidos(estado));
 
 function mensaje(texto, tipo = '') {
   $e('#eEstado').textContent = texto;
@@ -22,6 +26,7 @@ function nombreColor(hex) {
 }
 
 function textoEleccion() {
+  if (esModelo()) return nombreColor(estado.modelo);
   const c = coloresElegidos(estado);
   const partes = [`base ${nombreColor(c.base)}`, `letras ${nombreColor(c.letras)}`];
   if (visorCliente.mallas.numero) partes.push(`número ${nombreColor(c.numero)}`);
@@ -29,7 +34,7 @@ function textoEleccion() {
 }
 
 function actualizar() {
-  visorCliente.pintar(coloresElegidos(estado));
+  visorCliente.pintar(coloresLink());
   if (datosLink.whatsapp) {
     const nombre = $e('#eNombre').value.trim();
     const texto = `¡Hola! ${nombre ? `Soy ${nombre}. ` : ''}Para "${datosLink.titulo}" elegí: ${textoEleccion()}.` +
@@ -55,33 +60,43 @@ async function iniciar() {
     $e('#eVacio').textContent = e.message;
     return;
   }
-  document.title = `${datosLink.titulo} · Elegí los colores`;
+  document.title = `${datosLink.titulo} · Elegí ${esModelo() ? 'el color' : 'los colores'}`;
+  if (esModelo()) {
+    $e('#eNota').textContent = 'Tocá un color para probarlo. Podés girar el modelo con el dedo o con el mouse. Si dudás entre varios, enviá todos: se guardan los que mandes.';
+  }
   $e('#eTitulo').textContent = datosLink.titulo;
   $e('#eNegocio').textContent = datosLink.negocio;
   // Arranca con lo que ya eligió (si volvió a entrar) o con los dos primeros colores
   datosLink.elecciones ||= [];
   const previa = datosLink.elecciones.at(-1);
-  estado.base = previa?.base.hex || datosLink.colores[0].hex;
-  estado.letras = previa?.letras.hex || datosLink.colores[1].hex;
-  estado.numero = previa?.numero.hex || estado.letras;
-  estado.numeroIgualLetras = !previa || previa.numero.hex === previa.letras.hex;
+  if (esModelo()) {
+    estado.modelo = previa?.modelo?.hex || datosLink.colores[0].hex;
+  } else {
+    estado.base = previa?.base.hex || datosLink.colores[0].hex;
+    estado.letras = previa?.letras.hex || datosLink.colores[1].hex;
+    estado.numero = previa?.numero.hex || estado.letras;
+    estado.numeroIgualLetras = !previa || previa.numero.hex === previa.letras.hex;
+  }
   if (previa?.nombre) $e('#eNombre').value = previa.nombre;
   if (previa?.comentario) $e('#eComentario').value = previa.comentario;
 
   try {
     await visorCliente.iniciar();
-    visorCliente.cargar({
-      base: base64ABuffer(datosLink.base),
-      numero: datosLink.numero ? base64ABuffer(datosLink.numero) : null,
-      altura: datosLink.altura,
-    });
+    if (esModelo()) {
+      visorCliente.cargarModelo(await bajarModeloLink());
+    } else {
+      visorCliente.cargar({
+        base: base64ABuffer(datosLink.base),
+        numero: datosLink.numero ? base64ABuffer(datosLink.numero) : null,
+        altura: datosLink.altura,
+      });
+    }
   } catch (e) {
     $e('#eVacio').textContent = e.message;
     return;
   }
   $e('#eVacio').hidden = true;
-  const partes = PARTES_VISOR.filter(([p]) => p !== 'numero' || visorCliente.mallas.numero);
-  renderPaletasVisor($e('#ePaletas'), datosLink.colores, estado, actualizar, partes);
+  renderPaletasVisor($e('#ePaletas'), datosLink.colores, estado, actualizar, partesLink());
   actualizar();
   $e('#eEnviar').disabled = false;
   $e('#eDescargar').disabled = false;
@@ -89,9 +104,22 @@ async function iniciar() {
   renderEnviadas();
 }
 
+/** El STL está en la nube, comprimido y en pedazos: se bajan y se descomprimen. */
+async function bajarModeloLink() {
+  const pedazos = [];
+  for (let n = 0; n < datosLink.modelo.partes; n++) {
+    $e('#eVacio').textContent = `Cargando el modelo… ${Math.round((n / datosLink.modelo.partes) * 100)}%`;
+    const resp = await fetch(`${API_PUBLICA}/publico/${idLink}/modelo/${n}`);
+    if (!resp.ok) throw new Error((await resp.json().catch(() => ({}))).error || 'No se pudo cargar el modelo');
+    pedazos.push(await resp.arrayBuffer());
+  }
+  const gz = new Blob(pedazos).stream().pipeThrough(new DecompressionStream('gzip'));
+  return new Response(gz).arrayBuffer();
+}
+
 /** Guarda la combinación actual en el historial del link. origen: 'web' o 'whatsapp'. */
 async function enviarEleccion(origen) {
-  const c = coloresElegidos(estado);
+  const c = coloresLink();
   const resp = await fetch(`${API_PUBLICA}/publico/${idLink}/eleccion`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -118,10 +146,16 @@ function renderEnviadas() {
     info.className = 'info';
     const muestras = document.createElement('span');
     muestras.className = 'trio';
-    muestras.append(...['base', 'letras', 'numero'].map((p) => muestraColor(e[p].hex)));
     const texto = document.createElement('small');
-    const partes = [`base ${e.base.nombre}`, `letras ${e.letras.nombre}`];
-    if (visorCliente.mallas.numero && e.numero.hex !== e.letras.hex) partes.push(`número ${e.numero.nombre}`);
+    const partes = [];
+    if (e.modelo) {
+      muestras.append(muestraColor(e.modelo.hex));
+      partes.push(e.modelo.nombre);
+    } else {
+      muestras.append(...['base', 'letras', 'numero'].map((p) => muestraColor(e[p].hex)));
+      partes.push(`base ${e.base.nombre}`, `letras ${e.letras.nombre}`);
+      if (visorCliente.mallas.numero && e.numero.hex !== e.letras.hex) partes.push(`número ${e.numero.nombre}`);
+    }
     texto.textContent = `${partes.join(', ')} · ${new Date(e.fecha).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })}`;
     info.append(muestras, texto);
     const ver = document.createElement('button');
@@ -129,9 +163,9 @@ function renderEnviadas() {
     ver.className = 'btn small secondary';
     ver.textContent = 'Ver';
     ver.addEventListener('click', () => {
-      Object.assign(estado, { base: e.base.hex, letras: e.letras.hex, numero: e.numero.hex, numeroIgualLetras: e.numero.hex === e.letras.hex });
-      const partesVisor = PARTES_VISOR.filter(([p]) => p !== 'numero' || visorCliente.mallas.numero);
-      renderPaletasVisor($e('#ePaletas'), datosLink.colores, estado, actualizar, partesVisor);
+      if (e.modelo) estado.modelo = e.modelo.hex;
+      else Object.assign(estado, { base: e.base.hex, letras: e.letras.hex, numero: e.numero.hex, numeroIgualLetras: e.numero.hex === e.letras.hex });
+      renderPaletasVisor($e('#ePaletas'), datosLink.colores, estado, actualizar, partesLink());
       actualizar();
       $e('#eLienzo').scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
@@ -162,7 +196,7 @@ document.querySelectorAll('[data-vista]').forEach((b) => b.addEventListener('cli
 $e('#eDescargar').addEventListener('click', () => {
   const a = document.createElement('a');
   a.href = visorCliente.imagen();
-  a.download = `Llavero_${textoEleccion().replace(/[^\wáéíóúñ]+/gi, '-')}.png`;
+  a.download = `${esModelo() ? datosLink.titulo : 'Llavero'}_${textoEleccion().replace(/[^\wáéíóúñ]+/gi, '-')}.png`;
   a.click();
 });
 

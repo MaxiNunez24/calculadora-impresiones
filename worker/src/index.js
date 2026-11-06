@@ -25,6 +25,7 @@
  * Todo requiere "Authorization: Bearer <API_TOKEN>", salvo las rutas públicas de los links
  * (el id es aleatorio de 128 bits, no se puede adivinar; vencen a los 60 días):
  *   GET    /publico/:id            modelo y colores ofrecidos
+ *   GET    /publico/:id/modelo/:n  pedazo n del STL de la nube (links de tipo "modelo")
  *   POST   /publico/:id/eleccion   el cliente agrega una combinación al historial del link
  *
  * Un cron semanal también actualiza los precios.
@@ -53,9 +54,9 @@ export default {
     const cors = corsHeaders(request.headers.get('Origin'), env);
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
     try {
-      if (new URL(request.url).pathname.startsWith('/publico/')) return json(await rutearPublico(request, env), 200, cors);
-      if (!(await autorizado(request, env))) throw new HttpError(401, 'Token inválido');
-      const resultado = await rutear(request, env);
+      const publico = new URL(request.url).pathname.startsWith('/publico/');
+      if (!publico && !(await autorizado(request, env))) throw new HttpError(401, 'Token inválido');
+      const resultado = publico ? await rutearPublico(request, env) : await rutear(request, env);
       if (resultado instanceof Response) {
         for (const [k, v] of Object.entries(cors)) resultado.headers.set(k, v);
         return resultado;
@@ -176,9 +177,12 @@ async function rutear(request, env) {
     if (metodo === 'POST' && !id) return crearCompartido(request, env);
     if (metodo === 'GET' && !id) {
       const { results } = await env.DB.prepare(
-        "SELECT id, creado, json_extract(datos, '$.titulo') AS titulo, eleccion FROM compartidos ORDER BY creado DESC",
+        `SELECT id, creado, json_extract(datos, '$.titulo') AS titulo, json_extract(datos, '$.tipo') AS tipo,
+                json_extract(datos, '$.modelo.id') AS modelo_id, eleccion FROM compartidos ORDER BY creado DESC`,
       ).all();
-      return results.map((r) => ({ id: r.id, creado: r.creado, titulo: r.titulo, elecciones: historialDe(r.eleccion) }));
+      return results.map((r) => ({
+        id: r.id, creado: r.creado, titulo: r.titulo, tipo: r.tipo || 'llavero', modeloId: r.modelo_id, elecciones: historialDe(r.eleccion),
+      }));
     }
     if (metodo === 'DELETE' && id) {
       await env.DB.prepare('DELETE FROM compartidos WHERE id = ?1').bind(id).run();
@@ -330,6 +334,25 @@ async function crearCompartido(request, env) {
   const colores = (Array.isArray(d.colores) ? d.colores : []).filter((c) => esHex(c?.hex)).slice(0, 40)
     .map((c) => ({ nombre: texto(c.nombre, 40), hex: c.hex }));
   if (colores.length < 2) throw new HttpError(400, 'Ofrecé al menos dos colores');
+  if (d.tipo === 'modelo') {
+    // El STL ya está en la nube: el link solo lo referencia
+    const m = await env.MODELOS.prepare(
+      'SELECT id, nombre, partes, (SELECT COUNT(*) FROM modelo_partes p WHERE p.modelo = m.id) AS subidas FROM modelos m WHERE id = ?1',
+    ).bind(String(d.modeloId || '')).first();
+    if (!m || m.subidas !== m.partes) throw new HttpError(400, 'Ese modelo no está completo en la nube');
+    const datos = {
+      tipo: 'modelo',
+      titulo: texto(d.titulo, 80) || m.nombre,
+      negocio: texto(d.negocio, 80),
+      whatsapp: texto(d.whatsapp, 20).replace(/\D/g, ''),
+      colores,
+      modelo: { id: m.id, nombre: m.nombre, partes: m.partes },
+    };
+    const id = crypto.randomUUID().replace(/-/g, '');
+    await env.DB.prepare('INSERT INTO compartidos (id, creado, datos) VALUES (?1, ?2, ?3)')
+      .bind(id, new Date().toISOString(), JSON.stringify(datos)).run();
+    return { id };
+  }
   if (typeof d.base !== 'string' || !d.base) throw new HttpError(400, 'Falta el modelo de la base');
   const datos = {
     titulo: texto(d.titulo, 80) || 'Tu llavero',
@@ -347,7 +370,7 @@ async function crearCompartido(request, env) {
 }
 
 async function rutearPublico(request, env) {
-  const [, id, accion] = new URL(request.url).pathname.split('/').filter(Boolean);
+  const [, id, accion, n] = new URL(request.url).pathname.split('/').filter(Boolean);
   if (!/^[0-9a-f]{32}$/.test(id || '')) throw new HttpError(404, 'Link inválido');
   const fila = await env.DB.prepare('SELECT datos, creado, eleccion FROM compartidos WHERE id = ?1').bind(id).first();
   if (!fila || Date.now() - Date.parse(fila.creado) > DIAS_LINK * 86_400_000) {
@@ -358,18 +381,25 @@ async function rutearPublico(request, env) {
   if (request.method === 'GET' && !accion) {
     return { ...datos, elecciones: historial };
   }
+  if (request.method === 'GET' && accion === 'modelo' && datos.tipo === 'modelo' && /^\d+$/.test(n || '')) {
+    const fila2 = await env.MODELOS.prepare('SELECT datos FROM modelo_partes WHERE modelo = ?1 AND n = ?2')
+      .bind(datos.modelo.id, Number(n)).first();
+    if (!fila2) throw new HttpError(404, 'El modelo ya no está disponible');
+    return new Response(new Uint8Array(fila2.datos), {
+      headers: { 'Content-Type': 'application/octet-stream', 'Cache-Control': 'public, max-age=86400' },
+    });
+  }
   if (request.method === 'POST' && accion === 'eleccion') {
     const e = await leerJson(request);
     const permitidos = new Set(datos.colores.map((c) => c.hex.toLowerCase()));
-    for (const parte of ['base', 'letras', 'numero']) {
+    const partes = datos.tipo === 'modelo' ? ['modelo'] : ['base', 'letras', 'numero'];
+    for (const parte of partes) {
       if (!esHex(e[parte]) || !permitidos.has(e[parte].toLowerCase())) throw new HttpError(400, 'Color no disponible');
     }
     const nombreDe = (hex) => datos.colores.find((c) => c.hex.toLowerCase() === hex.toLowerCase()).nombre;
     const eleccion = {
       fecha: new Date().toISOString(),
-      base: { hex: e.base, nombre: nombreDe(e.base) },
-      letras: { hex: e.letras, nombre: nombreDe(e.letras) },
-      numero: { hex: e.numero, nombre: nombreDe(e.numero) },
+      ...Object.fromEntries(partes.map((p) => [p, { hex: e[p], nombre: nombreDe(e[p]) }])),
       nombre: texto(e.nombre, 60),
       comentario: texto(e.comentario, 300),
       origen: e.origen === 'whatsapp' ? 'whatsapp' : 'web',
@@ -378,7 +408,7 @@ async function rutearPublico(request, env) {
     // WhatsApp), se actualiza la última en vez de repetirla
     const ultima = historial.at(-1);
     const repetida = ultima && Date.now() - Date.parse(ultima.fecha) < MINUTOS_REPETIDA * 60_000
-      && ['base', 'letras', 'numero'].every((p) => ultima[p].hex.toLowerCase() === eleccion[p].hex.toLowerCase())
+      && partes.every((p) => ultima[p]?.hex.toLowerCase() === eleccion[p].hex.toLowerCase())
       && ultima.nombre === eleccion.nombre && ultima.comentario === eleccion.comentario;
     if (repetida) {
       ultima.fecha = eleccion.fecha;

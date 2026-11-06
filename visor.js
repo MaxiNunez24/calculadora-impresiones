@@ -142,16 +142,21 @@ function mostrarLink(id, titulo) {
 
 async function crearLink() {
   if (!conectado()) { estadoCompartir('Iniciá sesión para crear links.', 'error'); return; }
-  if (!archivosVisor.base) { estadoCompartir('Primero cargá el STL de la base.', 'error'); return; }
+  const esModelo = modoVisor === 'modelo';
+  if (esModelo && !modeloActual) { estadoCompartir('Primero abrí un modelo.', 'error'); return; }
+  if (esModelo && !modeloActual.id) { estadoCompartir('Ese STL no está en la nube: subilo con "Subir STL" para poder compartirlo.', 'error'); return; }
+  if (!esModelo && !archivosVisor.base) { estadoCompartir('Primero cargá el STL de la base.', 'error'); return; }
   const colores = coloresDisponibles().filter((c) => !noOfrecidos.has(c.hex.toLowerCase()))
     .map(({ nombre, hex }) => ({ nombre, hex }));
   if (colores.length < 2) { estadoCompartir('Tildá al menos dos colores.', 'error'); return; }
-  const titulo = $('#vTitulo').value.trim() || 'Tu llavero';
+  const titulo = $('#vTitulo').value.trim() || (esModelo ? modeloActual.nombre : 'Tu llavero');
   const boton = $('#vCompartir');
   boton.disabled = true;
   estadoCompartir('Creando link…');
   try {
-    const { id } = await api('POST', '/compartidos', {
+    const { id } = await api('POST', '/compartidos', esModelo ? {
+      tipo: 'modelo', modeloId: modeloActual.id, titulo, negocio: config.nombreNegocio, whatsapp: config.contacto, colores,
+    } : {
       titulo,
       negocio: config.nombreNegocio,
       whatsapp: config.contacto,
@@ -171,6 +176,7 @@ async function crearLink() {
 }
 
 function describirEleccion(e) {
+  if (e.modelo) return `color ${e.modelo.nombre}`;
   const partes = [`base ${e.base.nombre}`, `letras ${e.letras.nombre}`];
   if (e.numero.hex !== e.letras.hex) partes.push(`número ${e.numero.nombre}`);
   return partes.join(', ');
@@ -223,7 +229,7 @@ async function renderLinks() {
         info.className = 'info';
         const trio = document.createElement('span');
         trio.className = 'trio';
-        trio.append(...['base', 'letras', 'numero'].map((p) => muestraColor(e[p].hex)));
+        trio.append(...(e.modelo ? ['modelo'] : ['base', 'letras', 'numero']).map((p) => muestraColor(e[p].hex)));
         const texto = document.createElement('small');
         const via = { whatsapp: ' · por WhatsApp', 'web y whatsapp': ' · web y WhatsApp' }[e.origen] || '';
         texto.textContent = `${describirEleccion(e)} · ${new Date(e.fecha).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })}${via}` +
@@ -233,7 +239,9 @@ async function renderLinks() {
         ver.type = 'button';
         ver.className = 'btn small secondary';
         ver.textContent = 'Ver en el visor';
-        ver.addEventListener('click', () => {
+        ver.addEventListener('click', async () => {
+          if (e.modelo) { await verEleccionModelo(l.modeloId, e.modelo.hex); return; } // modelos.js
+          if (modoVisor !== 'llavero') await cambiarModo('llavero');
           estadoVisor = { base: e.base.hex, letras: e.letras.hex, numero: e.numero.hex, numeroIgualLetras: e.numero.hex === e.letras.hex };
           visorPriv.pintar(coloresElegidos(estadoVisor));
           renderPaletas();

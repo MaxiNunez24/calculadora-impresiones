@@ -230,12 +230,26 @@ async function verModelo(m) {
   $('#vVacio').hidden = true;
   $('#vDescargar').disabled = false;
   $('#mBajarStl').disabled = false;
+  $('#vCompartir').disabled = false;
   const d = visorPriv.medidas;
   const f = (v) => v.toLocaleString('es-AR', { maximumFractionDigits: 1 });
   $('#mInfo').textContent = `${m.nombre}: ${f(d.x)} × ${f(d.y)} × ${f(d.z)} mm · ${Math.round(visorPriv.triangulos).toLocaleString('es-AR')} triángulos`;
   if (m.id) { estadoModelo.ultimo = m.id; guardarEstadoModelo(); }
   estadoNube('');
   renderNube();
+}
+
+/** "Ver en el visor" de una combinación de un link de modelo: abre ese modelo con el color elegido. */
+async function verEleccionModelo(modeloId, hex) {
+  estadoModelo.modelo = hex;
+  guardarEstadoModelo();
+  if (modoVisor !== 'modelo') await cambiarModo('modelo');
+  const m = nube.modelos.find((x) => x.id === modeloId);
+  if (m && modeloActual?.id !== modeloId) await abrirDeNube(m);
+  else if (!m) estadoNube('Ese modelo ya no está en la nube.', 'error');
+  renderPaletaModelo();
+  visorPriv.pintar({ modelo: hex });
+  document.querySelector('.visor').scrollIntoView({ behavior: 'smooth' });
 }
 
 function bajarStl() {
@@ -253,6 +267,7 @@ async function cambiarModo(modo) {
   escribirJson('calc3d.visorModo', modo);
   document.querySelectorAll('.visor .modo').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.modo === modo)));
   document.querySelector('.visor').dataset.modo = modo;
+  $('#vCompartir').disabled = modo === 'llavero' ? !archivosVisor.base : !modeloActual;
   if (modo === 'llavero') {
     if (archivosVisor.base) await mostrarModelo();
     else { $('#vVacio').hidden = false; limpiarLienzo(); }
