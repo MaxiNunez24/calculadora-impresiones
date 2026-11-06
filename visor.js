@@ -14,6 +14,8 @@ const visorPriv = new Visor3D($('#vLienzo'));
 const archivosVisor = { base: null, numero: null }; // ArrayBuffer de cada STL
 let estadoVisor = { numeroIgualLetras: true };
 let noOfrecidos = new Set(); // hex que no se ofrecen al cliente (por defecto se ofrecen todos)
+// Modo del visor: "modelo" (cualquier STL, un color) o "llavero" (base, letras y número). Lo maneja modelos.js.
+let modoVisor = leerJson('calc3d.visorModo', 'modelo') === 'llavero' ? 'llavero' : 'modelo';
 
 // ---------- Colores ----------
 function coloresDisponibles() {
@@ -67,6 +69,7 @@ function renderPaletas() {
 
 // ---------- Modelo ----------
 async function mostrarModelo() {
+  if (modoVisor !== 'llavero') return;
   await visorPriv.iniciar();
   visorPriv.cargar({ base: archivosVisor.base, numero: archivosVisor.numero, altura: Number($('#vAltura').value) || 2 });
   visorPriv.pintar(coloresElegidos(estadoVisor));
@@ -78,13 +81,18 @@ async function mostrarModelo() {
 async function cargarArchivo(parte, archivo) {
   $('#vEstado').textContent = 'Cargando…';
   try {
-    archivosVisor[parte] = await archivo.arrayBuffer();
-    if (archivosVisor.base) await mostrarModelo();
-    guardarVisor();
-    $('#vEstado').textContent = `${archivo.name} cargado`;
+    await usarEnLlavero(parte, await archivo.arrayBuffer(), archivo.name);
   } catch (e) {
     $('#vEstado').textContent = `No se pudo cargar: ${e.message}`;
   }
+}
+
+/** Pone un STL (de un archivo o de la nube) como base o número del llavero. */
+async function usarEnLlavero(parte, buffer, nombre) {
+  archivosVisor[parte] = buffer;
+  if (archivosVisor.base) await mostrarModelo();
+  guardarVisor();
+  $('#vEstado').textContent = `${nombre} cargado como ${parte === 'base' ? 'base' : 'número'}`;
 }
 
 function nombreDeHex(hex) {
@@ -92,6 +100,7 @@ function nombreDeHex(hex) {
 }
 
 function descargarImagenVisor() {
+  if (modoVisor === 'modelo') { descargarImagenModelo(); return; } // modelos.js
   const c = coloresElegidos(estadoVisor);
   const nombre = (hex) => nombreDeHex(hex).toLowerCase().replace(/\s+/g, '-');
   const a = document.createElement('a');

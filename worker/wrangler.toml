@@ -13,6 +13,12 @@ binding = "DB"
 database_name = "calculadora-3d"
 database_id = "c7984205-b492-4b59-828a-a20b1ec1c339"
 
+# STL guardados en la nube (base aparte para no llenar la de presupuestos: 500 MB gratis por base)
+[[d1_databases]]
+binding = "MODELOS"
+database_name = "calculadora-3d-modelos"
+database_id = "eb9ef8c2-fe49-41ed-97ad-c56725647df0"
+
 # Actualiza los precios de PrintALot los lunes a las 9:00 (hora argentina)
 [triggers]
 crons = ["0 12 * * 1"]

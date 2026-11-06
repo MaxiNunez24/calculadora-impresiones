@@ -118,6 +118,24 @@ class Visor3D {
     this.vista('frente');
   }
 
+  /** Un STL cualquiera, de una sola pieza y un solo color (parte "modelo"). */
+  cargarModelo(buffer) {
+    for (const m of Object.values(this.mallas)) {
+      this.escena.remove(m);
+      m.geometry.dispose();
+    }
+    const g = new THREE.STLLoader().parse(buffer);
+    if (!g.getAttribute('normal')) g.computeVertexNormals();
+    const malla = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ roughness: 0.65, metalness: 0, side: THREE.DoubleSide }));
+    this.mallas = { modelo: malla };
+    this.escena.add(malla);
+    const caja = new THREE.Box3().setFromObject(malla);
+    this.centro = caja.getCenter(new THREE.Vector3());
+    this.medidas = caja.getSize(new THREE.Vector3());
+    this.triangulos = g.getAttribute('position').count / 3;
+    this.vista('frente');
+  }
+
   pintar(colores) {
     for (const [parte, hex] of Object.entries(colores)) this.mallas[parte]?.material.color.set(hex);
     this.dibujar();

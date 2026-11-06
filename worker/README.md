@@ -28,11 +28,21 @@ $b = New-Object byte[] 32; [Security.Cryptography.RandomNumberGenerator]::Create
 
 Por último, en la calculadora: **Configuración → Sincronización**, pegá la URL que mostró `wrangler deploy` y el token, y tocá **Conectar**. Hacelo una vez en la PC y otra en el celular.
 
+## STL en la nube (base aparte)
+
+Los STL que subís desde el Catálogo van a otra base, `calculadora-3d-modelos` (binding `MODELOS`), para no llenar la de presupuestos (la capa gratuita da 500 MB por base). Se creó con:
+
+```bash
+npx wrangler d1 create calculadora-3d-modelos
+npx wrangler d1 execute calculadora-3d-modelos --remote --file=schema_modelos.sql
+```
+
 ## Desarrollo local
 
 Creá un archivo `.dev.vars` con `API_TOKEN=token-de-prueba` y ejecutá:
 
 ```bash
 npx wrangler d1 execute calculadora-3d --local --file=schema.sql
+npx wrangler d1 execute calculadora-3d-modelos --local --file=schema_modelos.sql
 npx wrangler dev --port 8787
 ```

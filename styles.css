@@ -435,3 +435,17 @@ body.publica #eForm { margin-top: 0.5rem; }
 .link-compartido { flex-wrap: wrap; }
 .link-compartido .info { flex: 1 1 14rem; }
 .link-compartido .gestionar .historial li { padding: 0.4rem 0; }
+
+/* ---------- Visor 3D: modos y modelos en la nube ---------- */
+.modos { display: inline-flex; border: 1px solid var(--border); border-radius: 999px; padding: 2px; gap: 2px; }
+.modo { border: 0; background: transparent; color: var(--text); font: inherit; font-size: 0.85rem; padding: 0.3rem 0.8rem; border-radius: 999px; cursor: pointer; }
+.modo[aria-selected="true"] { background: var(--accent); color: #fff; }
+.visor[data-modo="modelo"] .solo-llavero, .visor[data-modo="llavero"] .solo-modelo { display: none !important; }
+.nube { border: 1px solid var(--border); border-radius: 10px; padding: 0.6rem 0.75rem; margin-bottom: 0.75rem; }
+.nube h3 { font-size: 0.95rem; margin: 0; }
+.nube .nota { margin: 0.3rem 0; }
+.nube-lista { max-height: 15rem; overflow-y: auto; margin: 0; }
+.nube-lista li { flex-wrap: wrap; gap: 0.4rem; }
+.nube-lista li .info { flex: 1 1 12rem; min-width: 0; }
+.nube-lista li .info strong { overflow-wrap: anywhere; }
+.nube-lista li.activo { background: color-mix(in srgb, var(--accent) 10%, transparent); border-radius: 8px; }

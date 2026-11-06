@@ -279,6 +279,7 @@ async function sincronizarInicio() {
     renderHistorial();
     if (typeof sincronizarTermica === 'function') sincronizarTermica(); // termica.js
     if (typeof renderLinks === 'function') renderLinks(); // visor.js
+    if (typeof renderNube === 'function') renderNube(); // modelos.js
   }
 }
 

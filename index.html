@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Calculadora de impresiones</title>
   <meta name="description" content="Costos, presupuestos, catálogo de colores y ventas de impresiones 3D y térmicas">
-  <link rel="stylesheet" href="styles.css?v=18">
+  <link rel="stylesheet" href="styles.css?v=19">
 </head>
 <body class="bloqueado">
   <!-- Pantalla de ingreso: la contraseña es el token del Worker, que es lo que protege los datos -->
@@ -191,11 +191,32 @@
     <section id="catalogo" class="panel">
       <div class="card ancho-total no-print visor">
         <div class="barra-titulo">
-          <h2>Visualizador de colores</h2>
-          <span id="vCombinaciones" class="estado"></span>
+          <h2>Visor 3D</h2>
+          <div class="modos" role="tablist" aria-label="Modo del visor">
+            <button type="button" class="modo" data-modo="modelo" role="tab">Modelo</button>
+            <button type="button" class="modo" data-modo="llavero" role="tab">Llavero</button>
+          </div>
         </div>
-        <p class="nota">Cargá el STL de la base con las letras y, si tiene, el del número. Elegí un color para cada parte y descargá la imagen para mandársela al cliente.</p>
-        <div class="visor-archivos">
+
+        <div class="nube">
+          <div class="barra-titulo">
+            <h3>Mis modelos en la nube</h3>
+            <label class="btn small boton-archivo">Subir STL
+              <input id="mSubir" type="file" accept=".stl" multiple hidden>
+            </label>
+          </div>
+          <p class="nota" id="mUso">Subí solo los STL que quieras ver desde otro dispositivo. Se guardan comprimidos.</p>
+          <p id="mEstado" class="estado"></p>
+          <ul id="mLista" class="historial nube-lista"></ul>
+        </div>
+
+        <p class="nota solo-modelo">Elegí un modelo de la nube o abrí un STL de este dispositivo.
+          <label class="btn small secondary boton-archivo">Abrir STL sin subir
+            <input id="mArchivoLocal" type="file" accept=".stl" hidden>
+          </label>
+        </p>
+        <p class="nota solo-llavero">Cargá el STL de la base con las letras y, si tiene, el del número (desde la nube con "Base" y "Número", o desde este dispositivo). Elegí un color para cada parte y descargá la imagen para mandársela al cliente. <span id="vCombinaciones"></span></p>
+        <div class="visor-archivos solo-llavero">
           <label class="btn small secondary boton-archivo">Base con letras (STL)
             <input id="vArchivoBase" type="file" accept=".stl" hidden>
           </label>
@@ -219,10 +240,17 @@
               <button type="button" id="vDescargar" class="btn small" disabled>Descargar imagen</button>
             </div>
           </div>
-          <div id="vPaletas" class="visor-paletas"></div>
+          <div class="visor-paletas solo-llavero" id="vPaletas"></div>
+          <div class="visor-paletas solo-modelo">
+            <p id="mInfo" class="nota"></p>
+            <div id="mPaleta"></div>
+            <div class="acciones">
+              <button type="button" id="mBajarStl" class="btn small secondary" disabled>Descargar STL</button>
+            </div>
+          </div>
         </div>
 
-        <div class="visor-compartir">
+        <div class="visor-compartir solo-llavero">
           <h2 class="sub">Compartir con un cliente</h2>
           <p class="nota">Crea un link para que el cliente pruebe colores en su celular y te mande su elección. No ve nada más de tu página. Vence a los 60 días.</p>
           <label>Título
@@ -559,10 +587,11 @@
     </section>
   </main>
 
-  <script src="app.js?v=19"></script>
+  <script src="app.js?v=20"></script>
   <script src="termica.js?v=18"></script>
   <script src="finanzas.js?v=18"></script>
-  <script src="visor3d.js?v=18"></script>
-  <script src="visor.js?v=18"></script>
+  <script src="visor3d.js?v=19"></script>
+  <script src="visor.js?v=19"></script>
+  <script src="modelos.js?v=19"></script>
 </body>
 </html>

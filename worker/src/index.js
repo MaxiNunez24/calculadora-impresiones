@@ -15,6 +15,12 @@
  *   POST   /compartidos            crea un link para que un cliente elija colores (devuelve el id)
  *   GET    /compartidos            links creados y lo que eligió cada cliente
  *   DELETE /compartidos/:id
+ *   GET    /modelos                STL guardados en la nube (base MODELOS) y espacio usado
+ *   POST   /modelos                registra un STL nuevo {nombre, bytes, bytesGz, partes} (devuelve el id)
+ *   PUT    /modelos/:id            cambia el nombre {nombre}
+ *   DELETE /modelos/:id
+ *   PUT    /modelos/:id/:n         sube el pedazo n (binario, gzip, hasta 1,8 MB)
+ *   GET    /modelos/:id/:n         baja el pedazo n
  *
  * Todo requiere "Authorization: Bearer <API_TOKEN>", salvo las rutas públicas de los links
  * (el id es aleatorio de 128 bits, no se puede adivinar; vencen a los 60 días):
@@ -31,6 +37,9 @@ const DIAS_CACHE_COLORES = 7;
 const USER_AGENT = 'calculadora-3d-personal (consulta semanal de precios)';
 const DIAS_LINK = 60;
 const MAX_LINK_BYTES = 1_800_000; // D1 admite filas de hasta 2 MB
+const MAX_PARTE_BYTES = 1_800_000;
+const MAX_MODELO_BYTES = 200_000_000; // STL comprimido; el límite real es el espacio de la base
+const LIMITE_BASE_MODELOS = 500_000_000; // capa gratuita de D1: 500 MB por base
 
 class HttpError extends Error {
   constructor(status, message) {
@@ -46,7 +55,12 @@ export default {
     try {
       if (new URL(request.url).pathname.startsWith('/publico/')) return json(await rutearPublico(request, env), 200, cors);
       if (!(await autorizado(request, env))) throw new HttpError(401, 'Token inválido');
-      return json(await rutear(request, env), 200, cors);
+      const resultado = await rutear(request, env);
+      if (resultado instanceof Response) {
+        for (const [k, v] of Object.entries(cors)) resultado.headers.set(k, v);
+        return resultado;
+      }
+      return json(resultado, 200, cors);
     } catch (e) {
       return json({ error: e.message }, e.status || 500, cors);
     }
@@ -98,7 +112,7 @@ async function leerJson(request) {
 }
 
 async function rutear(request, env) {
-  const [recurso, id] = new URL(request.url).pathname.split('/').filter(Boolean).map(decodeURIComponent);
+  const [recurso, id, sub] = new URL(request.url).pathname.split('/').filter(Boolean).map(decodeURIComponent);
   const metodo = request.method;
 
   if (recurso === 'config' && !id) {
@@ -171,6 +185,8 @@ async function rutear(request, env) {
       return { ok: true };
     }
   }
+
+  if (recurso === 'modelos') return rutearModelos(request, env, metodo, id, sub);
 
   if (recurso === 'colores' && metodo === 'GET' && /^\d+$/.test(id || '')) {
     return coloresPrintalot(env, Number(id));
@@ -373,6 +389,79 @@ async function rutearPublico(request, env) {
     const guardar = historial.slice(-MAX_ELECCIONES);
     await env.DB.prepare('UPDATE compartidos SET eleccion = ?1 WHERE id = ?2').bind(JSON.stringify(guardar), id).run();
     return { ok: true, elecciones: guardar };
+  }
+  throw new HttpError(404, 'Ruta no encontrada');
+}
+
+// ---------- STL en la nube ----------
+// El navegador comprime el STL (gzip) y lo sube en pedazos; el Worker solo los guarda y los devuelve.
+async function rutearModelos(request, env, metodo, id, sub) {
+  if (!env.MODELOS) throw new HttpError(500, 'Falta la base de modelos (binding MODELOS)');
+  const db = env.MODELOS;
+  if (!id) {
+    if (metodo === 'GET') {
+      const { results } = await db.prepare(
+        `SELECT m.id, m.nombre, m.creado, m.bytes, m.bytes_gz, m.partes,
+                (SELECT COUNT(*) FROM modelo_partes p WHERE p.modelo = m.id) AS subidas
+         FROM modelos m ORDER BY m.creado DESC`,
+      ).all();
+      const usado = results.reduce((t, r) => t + r.bytes_gz, 0);
+      return {
+        limite: LIMITE_BASE_MODELOS,
+        usado,
+        modelos: results.map((r) => ({
+          id: r.id, nombre: r.nombre, creado: r.creado, bytes: r.bytes, bytesGz: r.bytes_gz, partes: r.partes,
+          completo: r.subidas === r.partes,
+        })),
+      };
+    }
+    if (metodo === 'POST') {
+      const { nombre, bytes, bytesGz, partes } = await leerJson(request);
+      const nombreOk = String(nombre || '').trim().slice(0, 120);
+      if (!nombreOk || !(bytes > 0) || !(bytesGz > 0) || !(partes >= 1)) throw new HttpError(400, 'Datos del modelo inválidos');
+      if (bytesGz > MAX_MODELO_BYTES || partes !== Math.ceil(bytesGz / MAX_PARTE_BYTES)) throw new HttpError(400, 'Tamaño inválido');
+      const fila = await db.prepare('SELECT COALESCE(SUM(bytes_gz), 0) AS usado FROM modelos').first();
+      if (fila.usado + bytesGz > LIMITE_BASE_MODELOS * 0.95) throw new HttpError(507, 'No queda espacio en la nube: borrá algún modelo');
+      const nuevo = crypto.randomUUID();
+      await db.prepare('INSERT INTO modelos (id, nombre, creado, bytes, bytes_gz, partes) VALUES (?1, ?2, ?3, ?4, ?5, ?6)')
+        .bind(nuevo, nombreOk, new Date().toISOString(), bytes, bytesGz, partes).run();
+      return { id: nuevo };
+    }
+  }
+  if (id && sub == null) {
+    if (metodo === 'PUT') {
+      const { nombre } = await leerJson(request);
+      const nombreOk = String(nombre || '').trim().slice(0, 120);
+      if (!nombreOk) throw new HttpError(400, 'Falta el nombre');
+      await db.prepare('UPDATE modelos SET nombre = ?1 WHERE id = ?2').bind(nombreOk, id).run();
+      return { ok: true };
+    }
+    if (metodo === 'DELETE') {
+      await db.batch([
+        db.prepare('DELETE FROM modelo_partes WHERE modelo = ?1').bind(id),
+        db.prepare('DELETE FROM modelos WHERE id = ?1').bind(id),
+      ]);
+      return { ok: true };
+    }
+  }
+  if (id && /^\d+$/.test(sub || '')) {
+    const n = Number(sub);
+    const modelo = await db.prepare('SELECT partes FROM modelos WHERE id = ?1').bind(id).first();
+    if (!modelo) throw new HttpError(404, 'Modelo no encontrado');
+    if (n >= modelo.partes) throw new HttpError(400, 'Pedazo inválido');
+    if (metodo === 'PUT') {
+      const datos = await request.arrayBuffer();
+      if (!datos.byteLength || datos.byteLength > MAX_PARTE_BYTES) throw new HttpError(400, 'Pedazo vacío o demasiado grande');
+      await db.prepare('INSERT OR REPLACE INTO modelo_partes (modelo, n, datos) VALUES (?1, ?2, ?3)').bind(id, n, datos).run();
+      return { ok: true };
+    }
+    if (metodo === 'GET') {
+      const fila = await db.prepare('SELECT datos FROM modelo_partes WHERE modelo = ?1 AND n = ?2').bind(id, n).first();
+      if (!fila) throw new HttpError(404, 'Falta ese pedazo');
+      return new Response(new Uint8Array(fila.datos), {
+        headers: { 'Content-Type': 'application/octet-stream', 'Cache-Control': 'private, max-age=31536000, immutable' },
+      });
+    }
   }
   throw new HttpError(404, 'Ruta no encontrada');
 }
