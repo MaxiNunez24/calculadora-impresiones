@@ -609,16 +609,19 @@ function renderResultado() {
   // Campos de precio y descuento: muestran el valor automático hasta que los edites
   const inputPrecio = $('#precioManual');
   const inputDescuento = $('#descuento');
-  if (!inputPrecio.dataset.manual) inputPrecio.value = r.sugeridoUnidad;
-  if (!inputDescuento.dataset.manual) inputDescuento.value = r.descuentoSugerido;
+  // Mientras escribís en el campo no se rellena: así podés borrarlo entero y escribir otro número.
+  // Al salir del campo o tocar Enter, si quedó vacío vuelve al valor automático.
+  const rellenar = (input, valor) => { if (!input.dataset.manual && document.activeElement !== input) input.value = valor; };
+  rellenar(inputPrecio, r.sugeridoUnidad);
+  rellenar(inputDescuento, r.descuentoSugerido);
   const inputGanancia = $('#ganancia');
-  if (!inputGanancia.dataset.manual) inputGanancia.value = config.gananciaPct;
+  rellenar(inputGanancia, config.gananciaPct);
   $('#ayudaGanancia').textContent = inputGanancia.dataset.manual
     ? `De este pedido. En Configuración: ${config.gananciaPct}%.`
     : 'La de Configuración. Subila para piezas chicas.';
   $('#restablecerGanancia').hidden = !inputGanancia.dataset.manual;
   const inputSena = $('#senaPct');
-  if (!inputSena.dataset.manual) inputSena.value = config.senaPct ?? 0;
+  rellenar(inputSena, config.senaPct ?? 0);
   $('#ayudaSena').textContent = r.senaMonto > 0
     ? `${money.format(r.senaMonto)} al confirmar. ${inputSena.dataset.manual ? `En Ajustes: ${config.senaPct}%.` : 'La de Ajustes.'} 0 = sin seña.`
     : 'Sin seña: no aparece en el presupuesto.';
@@ -1310,6 +1313,14 @@ $('#trabajo').addEventListener('input', (e) => {
   // Escribir en precio o descuento los deja fijos; borrarlos vuelve al automático
   if (['precioManual', 'descuento', 'ganancia', 'senaPct'].includes(e.target.id)) marcarManual(e.target, e.target.value !== '');
   renderResultado();
+});
+// Al salir del campo (o con Enter) se confirma: si lo dejaste vacío vuelve al automático
+const CAMPOS_AUTOMATICOS = ['precioManual', 'descuento', 'ganancia', 'senaPct'];
+$('#trabajo').addEventListener('focusout', (e) => {
+  if (CAMPOS_AUTOMATICOS.includes(e.target.id)) setTimeout(renderResultado);
+});
+$('#trabajo').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && CAMPOS_AUTOMATICOS.includes(e.target.id)) { e.preventDefault(); e.target.blur(); renderResultado(); }
 });
 $('#trabajo').addEventListener('reset', () => setTimeout(() => {
   marcarManual($('#precioManual'), false);
